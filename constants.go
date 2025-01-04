@@ -18,3 +18,5 @@ var USER_ID = MustGetenv("JMAP_USER_ID")
 
 const SESSION_URL = "https://api.fastmail.com/jmap/session"
 const API_URL = "https://api.fastmail.com/jmap/api/"
+
+var DRAFT_MAILBOX_ID = MustGetenv("DRAFT_MAILBOX_ID")

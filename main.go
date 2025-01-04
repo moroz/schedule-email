@@ -39,35 +39,63 @@ func PerformJMAPCall(request jmap.Request) (*jmap.Response, error) {
 	return &respBody, nil
 }
 
+func PrettyPrintJSONResponse(resp any) {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	enc.Encode(resp)
+}
+
 func main() {
-	resp, err := PerformJMAPCall(jmap.Request{
+	req := (jmap.Request{
 		Using: []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"},
 		Calls: []jmap.Invocation{
 			{
-				Name: "Mailbox/query",
-				Args: map[string]string{
+				Name: "Email/set",
+				Args: map[string]any{
 					"accountId": USER_ID,
+					"create": map[string]any{
+						"draft": MessageParams{
+							MailboxIDs: map[string]bool{
+								DRAFT_MAILBOX_ID: true,
+							},
+							Keywords: map[string]bool{
+								"$draft": true,
+							},
+							From: []Address{
+								{
+									Name:  "Karol Moroz",
+									Email: "karol@moroz.dev",
+								},
+							},
+							To: []Address{
+								{
+									Name:  "Karol Moroz",
+									Email: "recipient@moroz.dev",
+								},
+							},
+							Subject: "Test Schedule Email",
+							BodyStructure: EmailBodyPart{
+								PartID: "1",
+								Type:   "text/plain",
+								Headers: []EmailHeader{
+									{"Content-Language", "en"},
+								},
+							},
+							BodyValues: map[string]EmailBodyValue{
+								"1": {
+									Value: "Test creating email with structs!!!",
+								},
+							},
+						},
+					},
 				},
 			},
 		},
 	})
+	resp, err := PerformJMAPCall(req)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	resp, err = PerformJMAPCall(jmap.Request{
-		Using: []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"},
-		Calls: []jmap.Invocation{
-			{Name: "Mailbox/get", Args: map[string]any{
-				"accountId": USER_ID,
-				"ids":       nil,
-			}},
-		},
-	})
-	fmt.Printf("%#v\n", resp)
-	fmt.Println(err)
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	enc.SetEscapeHTML(false)
-	enc.Encode(resp)
+	PrettyPrintJSONResponse(resp)
 }
