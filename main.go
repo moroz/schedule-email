@@ -1,43 +1,73 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/foxcpp/go-jmap"
 )
 
-func MustGetenv(key string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		log.Fatalf("FATAL: Environment variable %s is not set!", key)
-	}
-	return value
-}
-
-var IMAP_TOKEN = MustGetenv("IMAP_TOKEN")
-
-const SESSION_URL = "https://api.fastmail.com/jmap/session"
-
-func main() {
-	req, err := http.NewRequest("GET", SESSION_URL, nil)
+func PerformJMAPCall(request jmap.Request) (*jmap.Response, error) {
+	var bodyBuf bytes.Buffer
+	err := json.NewEncoder(&bodyBuf).Encode(request)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("Failed to encode payload to JSON: %w", err)
 	}
-	req.Header.Add("Authorization", "Bearer "+IMAP_TOKEN)
+
+	req, err := http.NewRequest("POST", API_URL, &bodyBuf)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to initialize HTTP request: %w", err)
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", "Bearer "+API_TOKEN)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		return nil, fmt.Errorf("JMAP request failed: %w", err)
+	}
+
+	defer resp.Body.Close()
+	var respBody jmap.Response
+	err = respBody.Unmarshal(resp.Body, Unmarshallers)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to decode JMAP response: %w", err)
+	}
+	return &respBody, nil
+}
+
+func main() {
+	resp, err := PerformJMAPCall(jmap.Request{
+		Using: []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"},
+		Calls: []jmap.Invocation{
+			{
+				Name: "Mailbox/query",
+				Args: map[string]string{
+					"accountId": USER_ID,
+				},
+			},
+		},
+	})
+	if err != nil {
 		log.Fatal(err)
 	}
-	if resp.StatusCode != 200 {
-		log.Fatalf("API Returned response code %d", resp.StatusCode)
-	}
-	defer resp.Body.Close()
 
-	var result any
-	json.NewDecoder(resp.Body).Decode(&result)
-
-	fmt.Printf("%#v\n", result)
+	resp, err = PerformJMAPCall(jmap.Request{
+		Using: []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"},
+		Calls: []jmap.Invocation{
+			{Name: "Mailbox/get", Args: map[string]any{
+				"accountId": USER_ID,
+				"ids":       nil,
+			}},
+		},
+	})
+	fmt.Printf("%#v\n", resp)
+	fmt.Println(err)
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
+	enc.Encode(resp)
 }
