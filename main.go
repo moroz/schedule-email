@@ -1,10 +1,11 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
+	"net/http"
 	"os"
-
-	"github.com/emersion/go-imap/v2/imapclient"
 )
 
 func MustGetenv(key string) string {
@@ -15,20 +16,28 @@ func MustGetenv(key string) string {
 	return value
 }
 
-var IMAP_SERVER = MustGetenv("IMAP_SERVER")
-var IMAP_USER = MustGetenv("IMAP_USER")
-var IMAP_PASSWORD = MustGetenv("IMAP_PASSWORD")
+var IMAP_TOKEN = MustGetenv("IMAP_TOKEN")
+
+const SESSION_URL = "https://api.fastmail.com/jmap/session"
 
 func main() {
-	client, err := imapclient.DialTLS(IMAP_SERVER+":993", &imapclient.Options{})
+	req, err := http.NewRequest("GET", SESSION_URL, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	_ = client
+	req.Header.Add("Authorization", "Bearer "+IMAP_TOKEN)
 
-	cmd := client.Login(IMAP_USER, IMAP_PASSWORD)
-	err = cmd.Wait()
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Fatal(err)
 	}
+	if resp.StatusCode != 200 {
+		log.Fatalf("API Returned response code %d", resp.StatusCode)
+	}
+	defer resp.Body.Close()
+
+	var result any
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	fmt.Printf("%#v\n", result)
 }
