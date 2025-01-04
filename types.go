@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/foxcpp/go-jmap"
 )
@@ -10,6 +11,11 @@ type MailboxQueryResponse struct {
 	AccountID string   `json:"accountId"`
 	IDs       []string `json:"ids"`
 	Total     int      `json:"total"`
+}
+
+type EmailSetResponse struct {
+	AccountID string           `json:"accountId"`
+	Created   map[string]Email `json:"created"`
 }
 
 func GenericUnmarshaler[T any]() func(args json.RawMessage) (any, error) {
@@ -21,14 +27,23 @@ func GenericUnmarshaler[T any]() func(args json.RawMessage) (any, error) {
 }
 
 var Unmarshallers = map[string]jmap.FuncArgsUnmarshal{
-	"Mailbox/query": GenericUnmarshaler[MailboxQueryResponse](),
-	"Mailbox/get":   GenericUnmarshaler[any](),
-	"Email/set":     GenericUnmarshaler[any](),
+	"Mailbox/query":       GenericUnmarshaler[MailboxQueryResponse](),
+	"Mailbox/get":         GenericUnmarshaler[any](),
+	"Identity/get":        GenericUnmarshaler[IdentityGetResponse](),
+	"Email/set":           GenericUnmarshaler[EmailSetResponse](),
+	"EmailSubmission/set": GenericUnmarshaler[any](),
 }
 
 type Address struct {
 	Name  string `json:"name,omitempty"`
 	Email string `json:"email"`
+}
+
+type Email struct {
+	BlobID   string `json:"blobId,omitempty"`
+	ID       string `json:"id,omitempty"`
+	Size     int    `json:"size"`
+	ThreadID string `json:"threadId,omitempty"`
 }
 
 type EmailBodyValue struct {
@@ -56,4 +71,27 @@ type MessageParams struct {
 	Subject       string                    `json:"subject"`
 	BodyValues    map[string]EmailBodyValue `json:"bodyValues"`
 	BodyStructure EmailBodyPart             `json:"bodyStructure"`
+}
+
+type Envelope struct {
+	MailFrom      Address    `json:"mailFrom"`
+	RecipientTo   []Address  `json:"rcptTo"`
+	FutureRelease *time.Time `json:"FUTURERELEASE,omitempty"`
+}
+
+type EmailSubmission struct {
+	EmailID            string            `json:"emailId"`
+	IdentityIDResultOf map[string]string `json:"#identityId,omitempty"`
+	IdentityID         string            `json:"identityId,omitempty"`
+	Envelope           Envelope          `json:"envelope"`
+}
+
+type IdentityGetResponse struct {
+	AccountID string     `json:"accountId"`
+	List      []Identity `json:"list"`
+}
+
+type Identity struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
 }

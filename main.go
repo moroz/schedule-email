@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/foxcpp/go-jmap"
 )
@@ -46,12 +47,15 @@ func PrettyPrintJSONResponse(resp any) {
 	enc.Encode(resp)
 }
 
+var CAPABILITIES = []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", "urn:ietf:params:jmap:submission"}
+
 func main() {
 	req := (jmap.Request{
-		Using: []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"},
+		Using: CAPABILITIES,
 		Calls: []jmap.Invocation{
 			{
-				Name: "Email/set",
+				Name:   "Email/set",
+				CallID: "createDraft",
 				Args: map[string]any{
 					"accountId": USER_ID,
 					"create": map[string]any{
@@ -94,6 +98,69 @@ func main() {
 		},
 	})
 	resp, err := PerformJMAPCall(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	emailSet := resp.Responses[0].Args.(*EmailSetResponse)
+	msgID := emailSet.Created["draft"].ID
+
+	req = jmap.Request{
+		Using: CAPABILITIES,
+		Calls: []jmap.Invocation{
+			{
+				Name: "Identity/get",
+				Args: map[string]string{
+					"accountId": USER_ID,
+				},
+			},
+		},
+	}
+	resp, err = PerformJMAPCall(req)
+	var identity *string
+	list := resp.Responses[0].Args.(*IdentityGetResponse)
+	for _, item := range list.List {
+		if item.Email == "karol@moroz.dev" {
+			identity = &item.ID
+			break
+		}
+	}
+	if identity == nil {
+		log.Fatal("Could not find identity!")
+	}
+
+	ts := time.Now().UTC().Add(3 * time.Minute)
+
+	req = jmap.Request{
+		Using: CAPABILITIES,
+		Calls: []jmap.Invocation{
+			{
+				Name:   "EmailSubmission/set",
+				CallID: "send",
+				Args: map[string]any{
+					"accountId": USER_ID,
+					"create": map[string]EmailSubmission{
+						"submission": {
+							EmailID:    msgID,
+							IdentityID: *identity,
+							Envelope: Envelope{
+								MailFrom: Address{
+									Name:  "Karol Moroz",
+									Email: "karol@moroz.dev",
+								},
+								RecipientTo: []Address{
+									{"Test Recipient", "recipient@moroz.dev"},
+								},
+								FutureRelease: &ts,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	PrettyPrintJSONResponse(req)
+	resp, err = PerformJMAPCall(req)
 	if err != nil {
 		log.Fatal(err)
 	}
